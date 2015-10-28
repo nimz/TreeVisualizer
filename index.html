@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script src="jquery-1.11.3.min.js"></script>
+<script src="binary.js"></script>
+<script src="minheap.js"></script>
+<script src="maxheap.js"></script>
+<script src="bst.js"></script>
+<script src="avl.js"></script>
+<script src="redblack.js"></script>
+<script src="splay.js"></script>
+<script src="btree.js"></script>
+<script src="bplustree.js"></script>
+<script>
+var nodeID = 0;
+var lastClickInDiv = false; 
+var selectedNode = -1;
+var origR, origG, origB;
+var clicked = true;
+var defaultNodeSizeFactor = 0.05;
+var nodeSizeFactor = defaultNodeSizeFactor;
+var nodeWidth = 0;
+var elems = {};
+function numDigits(num) {
+    return String(num).length+(num<0);
+}
+function clearAll() {
+    if(confirm("Are you sure?")) {
+        elems = {};
+        nodeID = 0;
+        $("#c").contents().remove();
+    }
+}
+function insertKey(key) {
+    //var lel = $('#action').val();
+    /*var key = $('#key').val();
+    if (!$.isNumeric(key)) {
+        alert("Please enter an integer value of magnitude no greater than 2^53.");
+        alert(key);
+        return;
+    }
+    var num = parseFloat($('#key').val(),10);*/
+    var num = parseFloat(key,10);
+    num = num - num % 1;
+    if (num > Math.pow(2,53)) num = Math.pow(2,53);
+    else if (num < -Math.pow(2,53)) num = -Math.pow(2,53);
+    //$('#key').val(num);
+    //elems.push(num);
+    elems[nodeID] = num; // doesnt work if dups allowed!
+    jQuery('<div/>',
+        {id: "node"+nodeID,
+        class: "node",
+        text: num
+        //position: "absolute",
+    }).appendTo("#c");
+    var offset = $("#c").offset();
+    var curNode = "node"+nodeID;
+    var cn = "#"+curNode;
+    //$(cn).dblclick(function(e) {
+    $(cn).click(function(e) {
+        /*var xOffset = 24;
+        var yOffset = 24;
+        //$(this).fadeOut('fast');
+        $('#puff').css({
+            left: e.pageX - offset.left - xOffset + 'px',
+            top: e.pageY - offset.top - yOffset + 'px'
+        }).show();
+        animatePoof();
+        $(cn).remove();*/
+        selectNode(cn.substring(5));
+    });
+    //jQuery('<p/>', {text : num, class : "numtext", id : curNode+"text"}).appendTo(cn);
+    resize(nodeID);
+    //var lel = $("#c").css("width").slice(0,-2)/2 - $(cn).css("width").slice(0,-2) / 2;
+    //var [l, t] = index2pos(nodeID);
+    reposition(nodeID);
+    //$(cn).css({"position": "absolute", "top": t+"px", "left": l+"px", "display": "block"});
+    nodeID++;
+    return num;
+}
+function insertKeys() {
+    var inp = $('#key').val();
+    inp = inp.replace(/,/g, " ");
+    var keys = inp.match(/\S+/g);
+    if (keys == null || keys.length == 0) {
+        if (clicked) alert("Please enter an integer value of magnitude no greater than 2^53, or a list of such values.");
+        return;
+    }
+    var alerted = false;
+    var returnstr = "";
+    for (var i = 0; i < keys.length; i++) {
+        var key = keys[i];
+        if (!$.isNumeric(key)) {
+            if (!alerted) {
+                alert("Please enter an integer value of magnitude no greater than 2^53, or a list of such values.");
+                alerted = true;
+            }
+        }
+        else {
+            if (i != 0) returnstr += ", ";
+            returnstr += insertKey(key);
+        }
+    }
+    $('#key').val(returnstr);
+    //setTimeout($('#key').val(""), 1000);
+    return;
+}
+function deleteKey(nodeID) {
+    var node = "#node"+nodeID;
+    var xOffset = 24;
+    var yOffset = 24;
+    // http://stackoverflow.com/questions/4811303/jquery-sequence-fadeout-and-then-remove
+    $(node).fadeOut(100, function() { $(node).remove(); });
+    var radius = parseInt($(node).css("width").slice(0,-2),10)/2;
+    var nodeXCenter = parseInt($(node).css("left").slice(0,-2),10);
+    var nodeYCenter = parseInt($(node).css("top").slice(0,-2),10);
+    $('#puff').css({
+        left: nodeXCenter + radius - xOffset + 'px',
+        top: nodeYCenter + radius - yOffset + 'px'
+    }).show();
+    animatePoof();
+    //$(node).remove();
+    selectedNode = -1;
+    return;
+}
+function searchKey() {
+    return;
+}
+function resize(nodeID) {
+    var node = "#node"+nodeID;
+    var num = $(node).text();
+    //$("#"+node).css({ "width": numDigits(num)*10+"px", "height": numDigits(num)*10+"px"});
+    var cWidth = $('#c').css("width").slice(0,-2);
+    nodeWidth = (nodeSizeFactor*cWidth);
+    var nodeDim = nodeWidth + "px";
+    //$("#"+node).css("font-size",22-numDigits(num)+"px");
+    var textSize = Math.max(Math.min(Math.round(1.4*nodeWidth/(numDigits(num)+1)),50),5);
+    $(node).css({ "width": nodeDim, "line-height": nodeDim, "font-size": textSize+"px"});
+    //$("#"+node).css("font-size",textSize+"px");
+    return;
+}
+
+var maxRows = 8;
+var xpositions = [];
+
+/*function initializePos2() {
+    xpositions = new Array(Math.pow(2,maxRows)-1);
+    xpositions[0] = 0.5;
+    for (var i = 1; i < maxRows; i++) {
+        var xSep = Math.pow(2,-i);
+        for (var j = 0; j < Math.pow(2,i); j++) {
+            var index = Math.pow(2,i)+j-1;
+            xpositions[index] = xpositions[Math.floor((index-1)/2)];
+            if (index % 2 == 1)
+                xpositions[index] -= xSep / 2;
+            else xpositions[index] += xSep / 2;
+        }
+    }
+    return;
+}*/
+
+function lighten(nodeID) {
+    var node = "#node"+nodeID;
+    // http://stackoverflow.com/questions/1862130/strip-non-numeric-characters-from-string
+    var col = $(node).css("background-color").replace(/,/g, '.').replace(/[^\d.-]/g,''); // hacky, make single regex
+    var cols = col.split(".");
+    var r = parseInt(cols[0],10), g = parseInt(cols[1],10), b = parseInt(cols[2],10);
+    origR = r; origG = g; origB = b;
+    var r = Math.ceil((255+r)/2), g = Math.ceil((255+g)/2), b = Math.ceil((255+b)/2);
+    var result = "rgb("+r+", "+g+", "+b+")";
+    $(node).css("background-color",result);
+    return;
+}
+
+function darken(nodeID) {
+    var node = "#node"+nodeID;
+    var result = "rgb("+origR+", "+origG+", "+origB+")";
+    $(node).css("background-color",result);
+    return;
+}
+
+function selectNode(nodeID) {
+    if (selectedNode != nodeID) {
+        lighten(nodeID);
+        selectedNode = nodeID;
+        var node = "#node"+nodeID;
+        var num = $(node).text();
+    }
+    else {
+        selectedNode = -1;
+        darken(nodeID);
+    }
+    return;
+}
+
+function initializePos() {
+    xpositions = new Array(Math.pow(2,maxRows)-1);
+    xpositions[0] = 0.5;
+    for (var i = 1; i < maxRows; i++) {
+        var leftmost = Math.pow(2,-i-1);
+        for (var j = 0; j < Math.pow(2,i); j++) {
+            var index = Math.pow(2,i)+j-1;
+            xpositions[index] = leftmost+j*2*leftmost;
+        }
+    }
+    return;
+}
+
+function index2pos(index) {
+    if (xpositions.length == 0) initializePos();
+    /*index = index + 1;
+    var yOffset = 30;
+    var ySep = 1.4*nodeWidth;
+    var row = Math.floor(Math.log(index) / Math.LN2);
+    var xSep = Math.pow(1.5, 6-row) * nodeWidth;
+    var colIndex = index - Math.pow(2,row);
+    var middle = $("#c").css("width").slice(0,-2)/2;
+    var centerOffset = nodeWidth / 2;
+    var xPos = middle + (colIndex-row/2)*xSep - centerOffset; 
+    var yPos = yOffset + row*ySep;*/
+    /*index = index + 1;
+    var yOffset = 30;
+    var ySep = 1.4*nodeWidth;
+    var row = Math.floor(Math.log(index) / Math.LN2);
+    var xSep = Math.pow(1.5, 6-row) * nodeWidth;
+    var colIndex = index - Math.pow(2,row);
+    var middle = $("#c").css("width").slice(0,-2)/2;
+    var leftmost = middle - (Math.pow(2,row)-1)/2*xSep;
+    alert(leftmost);
+    var centerOffset = nodeWidth / 2;
+    var xPos = leftmost + colIndex*xSep - centerOffset; 
+    var yPos = yOffset + row*ySep;*/
+    index = parseInt(index,10) + 1;
+    if (index == 16 && nodeSizeFactor == defaultNodeSizeFactor) {
+        nodeSizeFactor = defaultNodeSizeFactor / 2;
+        resizeAll();
+        repositionAll();
+    }
+    var yOffset = 30;
+    var ySep = 1.4*nodeWidth;
+    var row = Math.floor(Math.log(index) / Math.LN2);
+    var cWidth = $("#c").css("width").slice(0,-2);
+    var colIndex = index - Math.pow(2,row);
+    var centerOffset = nodeWidth / 2;
+    var xPos = xpositions[index-1]*cWidth - centerOffset; 
+    //alert(xPos);
+    var yPos = yOffset + row*ySep;
+    //var lel = $("#c").css("width").slice(0,-2)/2 - $(cn).css("width").slice(0,-2) / 2;
+    return [xPos, yPos];
+}
+function reposition(nodeID) {
+    var node = "#node"+nodeID;
+    var pos = index2pos(nodeID);
+    var l = pos[0];
+    var t = pos[1];
+    $(node).css({"position": "absolute", "top": t+"px", "left": l+"px", "display": "block"});
+    return;
+}
+function render(nodeID) {
+    resize(nodeID);
+    reposition(nodeID);
+    return;
+}
+function updateKey() {
+    if ($("#action").val() == "ins")
+        insertKeys();
+    else if ($("#action").val() == "ins")
+        ;
+    else
+        ;
+    return;
+}
+function myFunction() {
+    document.getElementById("demo").innerHTML = "Hello World";
+}
+function animatePoof() {
+    // from http://stackoverflow.com/questions/10148298/puff-of-smoke-effect-javascript-sprite-animation
+    var bgTop = 0,
+        frame = 0,
+        frames = 6,
+        frameSize = 32,
+        frameRate = 75,
+        puff = $('#puff');
+    var animate = function(){
+        if(frame < frames){
+            puff.css({
+                backgroundPosition: "0 "+bgTop+"px"
+            });
+            bgTop = bgTop - frameSize;
+            frame++;
+            setTimeout(animate, frameRate);
+        }
+    };
+    animate();
+    setTimeout("$('#puff').hide()", frames * frameRate);
+}
+function resizeAll() {
+    for (var i in elems) resize(i);
+    return;
+}
+function repositionAll() {
+    for (var i in elems) reposition(i);
+    return;
+}
+function renderAll() {
+    for (var i in elems) render(i);
+    return;
+}
+$(window).resize(function() {
+    renderAll();
+    //$(".numtext").css("border","3px solid red");
+    //$( "#rcorners1" ).css({ "width": window.innerWidth * .9, "height": window.innerHeight * .75});
+    //, "margin-left": "auto", "margin-right": "auto" }
+    //$( "body" ).prepend( "<div>" + "lel" + "</div>" );
+});
+$(document).unbind('keydown').bind('keydown', function (event) {
+    // http://stackoverflow.com/questions/1495219/how-can-i-prevent-the-backspace-key-from-navigating-back
+    if (selectedNode != -1 && (event.keyCode == 8 || event.keyCode == 46)) {
+        event.preventDefault();
+        deleteKey(selectedNode);
+    }
+});
+$(document).ready(function(){
+    $("#key").keyup(function(event){
+        if(event.keyCode == 13) {
+            clicked = false;
+            $("#updatebutton").click();
+            clicked = true;
+        }
+    });
+    //return;
+});
+</script>
+<style>
+
+tab { padding-left: 1em; }
+div.container {
+    margin-left: auto;
+    margin-right: auto;
+    border-radius: 25px;
+    background-color: #EBFFFF;
+    width: 90vw;
+    height: 80vh;
+    min-width:1000px;
+    min-height:600px;
+    position:relative;
+    overflow-y: auto; /* y does the first start low? */
+    /*overflow: auto;*/
+}
+div.noselect {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    -khtml-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    /*http://stackoverflow.com/questions/826782/css-rule-to-disable-text-selection-highlighting*/
+}
+div.node {
+    /*padding: 10px;
+    width: 50px;
+    height: 50px;*/
+    border-radius: 50%;/*10% 25px*/
+    background-color: #00FF00;
+    text-align: center;
+    cursor: pointer;
+    display: none;
+    /*position: relative;
+    top: 280px;
+    left: 100px;
+    clear: none;*/
+}
+#puff {
+    cursor: pointer;
+    display: none;
+    position: absolute;
+    height: 32px;
+    width: 32px;
+    background: url("puff.png") no-repeat;
+    z-index : 1;
+    /*adapted from http://stackoverflow.com/questions/10148298/puff-of-smoke-effect-javascript-sprite-animation */
+}
+</style>
+</head>
+<body>
+
+<h1>animate checkbox; lighten, copy + delete when selecting a node (make container unselectable)
+    REBUILD IN: Original insertion order, random order, sorted order, or clear
+    IDEAS FOR RENDERING: shorten longest distance; move all nodes over if leftmost off screen
+    Make nodes an "object" (OOP)
+Disable delete = go back page if last click was in div
+When click off of node, unselect it</h1>
+
+<!--<p ondblclick="myFunction()">Double-click this paragraph to trigger a function.</p>-->
+
+<!--<p id="demo"></p>-->
+<p align="center">
+    <select id="treetype">
+        <option value="bst" selected="selected">Binary Search Tree</option>
+        <option value="avl">AVL Tree</option>
+        <option value="rb">Red-Black Tree</option>
+        <option value="sp">Splay Tree</option>
+        <option value="min">Min-Heap</option>
+        <option value="max">Max-Heap</option>
+        <option value="bin">Binary Tree</option>
+        <option value="b">B-Tree</option>
+        <option value="bpt">B+ Tree</option>
+    </select>
+    <tab>Allow duplicates<input type="checkbox" name="dup"><tab>
+    <button type="button" name="treebutton">Go!</button>
+</p>
+
+<p align="center">
+    <select id="action">
+        <option value="ins">Insert</option>
+        <option value="del">Delete</option>
+        <option value="ser">Search</option>
+    </select>
+    <input type="text" id="key">
+    <button type="button" id="updatebutton" onclick="updateKey()">Go!</button>
+    <tab><tab><button type="button" onclick="clearAll()">Clear</button>
+</p>
+
+<div class="container" id="c">
+    <div id="puff"></div>
+</div>
+
+<br><br><p align="center"><a href="http://www.google.com">Report a bug</a><tab>&#9632;<tab><a href="http://www.google.com">Code on GitHub</a>
+
+</body>
+<script>
+
+</script>
+</html>
